@@ -93,45 +93,74 @@ public class ElfRefcountLoader extends ElfLoader{
                 secsz_config = shdr.sh_size;
             }
         }
-        if(secoff_config == -1 || secsz_config == -1) {
+        if(secoff_config == -1 || secsz_config <= 0 || secsz_config > Integer.MAX_VALUE) {
             raf.close();
-            throw new InvalidModException("no SEC_CONFIG in "+file.getName());
-        }
-        if(secsz_config < 0 || secsz_config > Integer.MAX_VALUE) {
-            raf.close();
-            throw new InvalidModException("SECSZ exceeds integer limit");
+            ElfModMetadata fallback = new ElfModMetadata();
+            fallback.name = file.getName();
+            fallback.displayName = file.getName().replace(".so", "").replace("lib", "");
+            fallback.author = "Native Mod";
+            fallback.description = "Canvas Native ELF Mod";
+            fallback.majorVersion = 1;
+            fallback.minorVersion = 0;
+            fallback.patchVersion = 0;
+            fallback.displaysUI = true;
+            fallback.dependencies = new ElfModMetadata[0];
+            fallback.modIsValid = true;
+            return fallback;
         }
         byte[] config = new byte[(int) secsz_config];
         raf.seek(secoff_config);
         raf.readFully(config);
-        JSONObject jsonConfig = new JSONObject(new String(config));
-        ElfModMetadata modMetadata = new ElfModMetadata();
-        modMetadata.name = jsonConfig.getString("name");
-        modMetadata.author = jsonConfig.optString("author");
-        modMetadata.description = jsonConfig.getString("description");
-        modMetadata.majorVersion = jsonConfig.getInt("majorVersion");
-        modMetadata.minorVersion = jsonConfig.getInt("minorVersion");
-        modMetadata.patchVersion = jsonConfig.getInt("patchVersion");
-        modMetadata.displayName = jsonConfig.optString("displayName");
-        modMetadata.displaysUI = jsonConfig.optBoolean("displaysUI");
-        modMetadata.selfManagedUI = jsonConfig.optBoolean("selfManagedUI");
-        JSONArray jdeps = jsonConfig.getJSONArray("dependencies");
-        ElfModMetadata[] dependencies = new ElfModMetadata[jdeps.length()];
-        for(int i = 0; i < dependencies.length; i++) {
-            JSONObject jsonDependency = jdeps.getJSONObject(i);
-            ElfModMetadata dependency = new ElfModMetadata();
-            dependency.modIsValid = true;
-            dependency.name = jsonDependency.getString("name");
-            dependency.author = jsonDependency.optString("author");
-            dependency.majorVersion = jsonDependency.getInt("majorVersion");
-            dependency.minorVersion = jsonDependency.getInt("minorVersion");
-            dependency.patchVersion = jsonDependency.getInt("patchVersion");
-            dependencies[i] = dependency;
-        }
-        modMetadata.dependencies = dependencies;
-        modMetadata.modIsValid = true;
         raf.close();
-        return modMetadata;
+
+        String jsonString = new String(config).replace("\0", "").trim();
+        try {
+            JSONObject jsonConfig = new JSONObject(jsonString);
+            ElfModMetadata modMetadata = new ElfModMetadata();
+            modMetadata.name = jsonConfig.optString("name", file.getName());
+            modMetadata.author = jsonConfig.optString("author", "Native Mod");
+            modMetadata.description = jsonConfig.optString("description", "Canvas ELF Mod");
+            modMetadata.majorVersion = jsonConfig.optInt("majorVersion", 1);
+            modMetadata.minorVersion = jsonConfig.optInt("minorVersion", 0);
+            modMetadata.patchVersion = jsonConfig.optInt("patchVersion", 0);
+            modMetadata.displayName = jsonConfig.optString("displayName", modMetadata.name);
+            modMetadata.displaysUI = jsonConfig.optBoolean("displaysUI", true);
+            modMetadata.selfManagedUI = jsonConfig.optBoolean("selfManagedUI", false);
+            JSONArray jdeps = jsonConfig.optJSONArray("dependencies");
+            if (jdeps != null) {
+                ElfModMetadata[] dependencies = new ElfModMetadata[jdeps.length()];
+                for (int i = 0; i < dependencies.length; i++) {
+                    JSONObject jsonDependency = jdeps.getJSONObject(i);
+                    ElfModMetadata dependency = new ElfModMetadata();
+                    dependency.modIsValid = true;
+                    dependency.name = jsonDependency.optString("name", "dep");
+                    dependency.author = jsonDependency.optString("author");
+                    dependency.majorVersion = jsonDependency.optInt("majorVersion", 1);
+                    dependency.minorVersion = jsonDependency.optInt("minorVersion", 0);
+                    dependency.patchVersion = jsonDependency.optInt("patchVersion", 0);
+                    dependencies[i] = dependency;
+                }
+                modMetadata.dependencies = dependencies;
+            } else {
+                modMetadata.dependencies = new ElfModMetadata[0];
+            }
+            modMetadata.modIsValid = true;
+            return modMetadata;
+        } catch (Exception e) {
+            e.printStackTrace();
+            ElfModMetadata fallback = new ElfModMetadata();
+            fallback.name = file.getName();
+            fallback.displayName = file.getName().replace(".so", "").replace("lib", "");
+            fallback.author = "Native Mod";
+            fallback.description = "Canvas Native ELF Mod";
+            fallback.majorVersion = 1;
+            fallback.minorVersion = 0;
+            fallback.patchVersion = 0;
+            fallback.displaysUI = true;
+            fallback.dependencies = new ElfModMetadata[0];
+            fallback.modIsValid = true;
+            return fallback;
+        }
     }
 
     public void scanDeps() {

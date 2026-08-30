@@ -6,4 +6,5 @@
 #define SKY_MODLOADER_VISIBILITY_H
 
 #define PRIVATE_API __attribute__((visibility ("hidden")))
+#define PUBLIC_API __attribute__((visibility ("default")))
 #endif //SKY_MODLOADER_VISIBILITY_H

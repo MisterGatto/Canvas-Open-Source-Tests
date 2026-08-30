@@ -23,6 +23,8 @@
 #include <android/asset_manager_jni.h>
 #include "shadowhook.h"
 #include "Core/starwatch/starwatch_block.h"
+#include "Core/Lua/LuaManager.h"
+#include "Core/Lua/LuaUIBridge.h"
 
 extern "C" {
 #include "Core/ceserver/ceserver.h"
@@ -108,6 +110,27 @@ PRIVATE_API static void HelpMarker(const Canvas::UserLib& userLib)
     }
 }
 
+PRIVATE_API static void HelpMarkerLua(const Canvas::Lua::LuaScriptInstance& script)
+{
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextWrapped("%s: %s [Lua]", script.name.c_str(), script.version.c_str());
+        if (!script.author.empty()) {
+            ImGui::TextWrapped("Author: %s", script.author.c_str());
+        }
+
+        if (!script.description.empty()) {
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", script.description.c_str());
+        }
+
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 PRIVATE_API void DrawMods() {
     // SystemsTest();
     for (auto &userLib: Canvas::userLibs) {
@@ -127,6 +150,7 @@ PRIVATE_API void DrawMods() {
             }
         }
     }
+    Canvas::Lua::LuaManager::getInstance().renderUI();
 }
 
 PRIVATE_API void Canvas::CanvasMenu() {
@@ -136,7 +160,10 @@ PRIVATE_API void Canvas::CanvasMenu() {
     }
 
     ImGui::Begin("Canvas Menu");
-    if (!Canvas::userLibs.empty() && ImGui::BeginTable(
+    auto luaScripts = Canvas::Lua::LuaManager::getInstance().getScripts();
+    bool hasAnyMods = !Canvas::userLibs.empty() || !luaScripts.empty();
+
+    if (hasAnyMods && ImGui::BeginTable(
             "Mods##canvas_mods_table",
             2,
             ImGuiTableFlags_Borders
@@ -152,6 +179,8 @@ PRIVATE_API void Canvas::CanvasMenu() {
                 ImGui::CalcTextSize("Info").x + (20.0f / (24 / ImGui::GetFont()->FontSize))
         );
         ImGui::TableHeadersRow();
+
+        // 1. C++ .so mods
         for (auto &userLib: Canvas::userLibs) {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -159,8 +188,29 @@ PRIVATE_API void Canvas::CanvasMenu() {
 
             ImGui::TableSetColumnIndex(1);
             HelpMarker(userLib);
-
         }
+
+        // 2. Lua .lua mods
+        for (const auto &script: luaScripts) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+
+            bool isRunning = script->isRunning.load();
+            std::string label = script->name + " [Lua]##lua_toggle_" + script->name;
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.75f, 1.0f, 1.0f));
+            if (ImGui::Checkbox(label.c_str(), &isRunning)) {
+                if (isRunning) {
+                    Canvas::Lua::LuaManager::getInstance().startScript(script);
+                } else {
+                    Canvas::Lua::LuaManager::getInstance().stopScript(script);
+                }
+            }
+            ImGui::PopStyleColor();
+
+            ImGui::TableSetColumnIndex(1);
+            HelpMarkerLua(*script);
+        }
+
         ImGui::EndTable();
     }
 
@@ -286,6 +336,8 @@ Java_git_artdeell_skymodloader_MainActivity_settle(
     }
 
     install_chat_fix();
+
+    Canvas::Lua::LuaManager::getInstance().init();
 }
 
 
@@ -442,6 +494,34 @@ Java_git_artdeell_skymodloader_MainActivity_nativeSetStarwatchAllowed(
         jboolean allowed
 ) {
     starwatch_block_set_allowed(allowed == JNI_TRUE);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_git_artdeell_skymodloader_MainActivity_nativeLoadLuaMod(
+        JNIEnv *env,
+        jclass clazz,
+        jstring _path,
+        jstring _name,
+        jstring _author,
+        jstring _version,
+        jstring _description
+) {
+    const char* pathStr = env->GetStringUTFChars(_path, nullptr);
+    const char* nameStr = _name ? env->GetStringUTFChars(_name, nullptr) : "";
+    const char* authorStr = _author ? env->GetStringUTFChars(_author, nullptr) : "";
+    const char* versionStr = _version ? env->GetStringUTFChars(_version, nullptr) : "1.0";
+    const char* descStr = _description ? env->GetStringUTFChars(_description, nullptr) : "";
+
+    Canvas::Lua::LuaManager::getInstance().loadScript(
+        pathStr, nameStr, authorStr, versionStr, descStr
+    );
+
+    env->ReleaseStringUTFChars(_path, pathStr);
+    if (_name) env->ReleaseStringUTFChars(_name, nameStr);
+    if (_author) env->ReleaseStringUTFChars(_author, authorStr);
+    if (_version) env->ReleaseStringUTFChars(_version, versionStr);
+    if (_description) env->ReleaseStringUTFChars(_description, descStr);
 }
 
 // ---------------------------------------------------------------------------

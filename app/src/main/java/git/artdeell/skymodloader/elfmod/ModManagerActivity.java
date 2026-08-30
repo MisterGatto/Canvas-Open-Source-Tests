@@ -336,16 +336,42 @@ public class ModManagerActivity extends Activity implements LoadingListener, Mod
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_MOD && resultCode == Activity.RESULT_OK) {
+        if (requestCode == REQUEST_MOD && resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
             try {
-                InputStream dataStream = getContentResolver().openInputStream(Objects.requireNonNull(data.getData()));
-                loader.addModSafely(dataStream);
+                Uri uri = data.getData();
+                String fileName = getFileNameFromUri(uri);
+                InputStream dataStream = getContentResolver().openInputStream(uri);
+                loader.addModSafely(dataStream, fileName);
             } catch (FileNotFoundException e) {
                 Toast.makeText(this, R.string.mod_ioe, Toast.LENGTH_SHORT).show();
             }
         } else if (requestCode == REQUEST_IMPORT_OFFSETS && resultCode == Activity.RESULT_OK && data != null) {
             handleOffsetFileResult(data.getData());
         }
+    }
+
+    private String getFileNameFromUri(Uri uri) {
+        String result = null;
+        if (uri.getScheme() != null && uri.getScheme().equals("content")) {
+            try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex >= 0) {
+                        result = cursor.getString(nameIndex);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (result == null) {
+            result = uri.getLastPathSegment();
+            if (result != null) {
+                int cut = result.lastIndexOf('/');
+                if (cut != -1) {
+                    result = result.substring(cut + 1);
+                }
+            }
+        }
+        return result;
     }
 
     private void setLoadingStatus(boolean enable) {

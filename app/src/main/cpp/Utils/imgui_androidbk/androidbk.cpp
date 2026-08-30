@@ -584,6 +584,48 @@ PRIVATE_API static void loadFonts(ImGuiIO& io, jfloat fontsize, AAssetManager *m
     }
     /* END GEORGIAN */
 
+    /* UNICODE SYMBOLS & EXTENDED GLYPHS */
+    {
+        static const ImWchar kSymbolsRanges[] = {
+            0x2000, 0x206F, // General Punctuation
+            0x2070, 0x209F, // Superscripts and Subscripts
+            0x20A0, 0x20CF, // Currency Symbols
+            0x2100, 0x214F, // Letterlike Symbols
+            0x2150, 0x218F, // Number Forms
+            0x2190, 0x21FF, // Arrows
+            0x2200, 0x22FF, // Mathematical Operators
+            0x2300, 0x23FF, // Miscellaneous Technical
+            0x2460, 0x24FF, // Enclosed Alphanumerics
+            0x2500, 0x257F, // Box Drawing
+            0x2580, 0x259F, // Block Elements
+            0x25A0, 0x25FF, // Geometric Shapes
+            0x2600, 0x26FF, // Miscellaneous Symbols
+            0x2700, 0x27BF, // Dingbats
+            0x2B00, 0x2BFF, // Miscellaneous Symbols and Arrows
+            0x1F300, 0x1F5FF, // Miscellaneous Symbols and Pictographs
+            0x1F600, 0x1F64F, // Emoticons
+            0x1F680, 0x1F6FF, // Transport and Map
+            0x1F900, 0x1F9FF, // Supplemental Symbols
+            0,
+        };
+        static const char* kSymbolFontCandidates[] = {
+            "/system/fonts/NotoSansSymbols-VF.ttf",
+            "/system/fonts/NotoSansSymbols-Regular.ttf",
+            "/system/fonts/NotoSansSymbols2-Regular.ttf",
+            "/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+            nullptr,
+        };
+        ImFontConfig fcSym;
+        fcSym.MergeMode = true;
+        for (int si = 0; kSymbolFontCandidates[si]; ++si) {
+            if (io.Fonts->AddFontFromFileTTF(kSymbolFontCandidates[si], fontsize,
+                                             &fcSym, kSymbolsRanges)) {
+                break;
+            }
+        }
+    }
+    /* END SYMBOLS */
+
     void* fontBufferDroidSans = nullptr;
 
     /* DROID SANS */

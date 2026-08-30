@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import git.artdeell.skymodloader.luamod.LuaModMetadata;
 import git.artdeell.skymodloader.updater.ModUpdater;
 
 public class ElfUIBackbone {
@@ -96,6 +97,11 @@ public class ElfUIBackbone {
     }
 
     private ElfModUIMetadata getElfMetadata(File f) throws IOException {
+        if (f.getName().endsWith(".lua")) {
+            ElfModUIMetadata meta = LuaModMetadata.parseFromFile(f);
+            meta.activity = this.activity;
+            return meta;
+        }
         FileInputStream fis = new FileInputStream(f);
         ElfModUIMetadata defaultMeta = new ElfModUIMetadata();
         defaultMeta.activity = this.activity;
@@ -113,6 +119,12 @@ public class ElfUIBackbone {
     }
 
     private ElfModUIMetadata getElfMetadata(ElfModUIMetadata defaultMeta, byte[] elfFile) {
+        if (LuaModMetadata.isLuaScript(elfFile) || (defaultMeta.name != null && defaultMeta.name.endsWith(".lua"))) {
+            ElfModUIMetadata luaMeta = LuaModMetadata.parseFromBytes(elfFile, defaultMeta.name);
+            luaMeta.activity = defaultMeta.activity;
+            luaMeta.modFile = defaultMeta.modFile;
+            return luaMeta;
+        }
         try {
             ElfFile elf = ElfFile.from(elfFile);
             ElfStringTable shstrtab = elf.getSectionNameStringTable();
@@ -133,43 +145,60 @@ public class ElfUIBackbone {
                     secsz_config = shdr.sh_size;
                 }
             }
-            if (secoff_config == -1 || secsz_config == -1) {
-                defaultMeta.modIsValid = false;
-                return defaultMeta;
-            }
-            if (secsz_config > 0 && secsz_config < Integer.MAX_VALUE) {
+            if (secoff_config != -1 && secsz_config > 0 && secsz_config < Integer.MAX_VALUE) {
                 byte[] config = new byte[(int) secsz_config];
                 System.arraycopy(elfFile, (int) secoff_config, config, 0, config.length);
-                JSONObject jsonConfig = new JSONObject(new String(config, 0, config.length));
-                defaultMeta.name = jsonConfig.getString("name");
-                defaultMeta.author = jsonConfig.optString("author");
-                defaultMeta.description = jsonConfig.optString("description");
-                defaultMeta.majorVersion = jsonConfig.getInt("majorVersion");
-                defaultMeta.minorVersion = jsonConfig.getInt("minorVersion");
-                defaultMeta.patchVersion = jsonConfig.getInt("patchVersion");
-                defaultMeta.displayName = jsonConfig.optString("displayName");
-                defaultMeta.githubReleasesUrl = jsonConfig.optString("githubReleasesUrl");
-                defaultMeta.offsetsUrl = jsonConfig.optString("offsetsUrl");
-                JSONArray jdeps = jsonConfig.getJSONArray("dependencies");
-                ElfModMetadata[] dependencies = new ElfModMetadata[jdeps.length()];
-                for (int i = 0; i < dependencies.length; i++) {
-                    JSONObject jsonDependency = jdeps.getJSONObject(i);
-
-                    ElfModMetadata dependency = new ElfModMetadata();
-                    dependency.modIsValid = true;
-                    dependency.name = jsonDependency.getString("name");
-                    dependency.author = jsonDependency.optString("author");
-                    dependency.description = jsonDependency.getString("description");
-                    dependency.majorVersion = jsonDependency.getInt("majorVersion");
-                    dependency.minorVersion = jsonDependency.getInt("minorVersion");
-                    dependency.patchVersion = jsonDependency.getInt("patchVersion");
-                    dependencies[i] = dependency;
+                String jsonStr = new String(config, 0, config.length).replace("\0", "").trim();
+                try {
+                    JSONObject jsonConfig = new JSONObject(jsonStr);
+                    defaultMeta.name = jsonConfig.optString("name", defaultMeta.name != null ? defaultMeta.name : "mod");
+                    defaultMeta.author = jsonConfig.optString("author", "Native Mod");
+                    defaultMeta.description = jsonConfig.optString("description", "Canvas ELF Mod");
+                    defaultMeta.majorVersion = jsonConfig.optInt("majorVersion", 1);
+                    defaultMeta.minorVersion = jsonConfig.optInt("minorVersion", 0);
+                    defaultMeta.patchVersion = jsonConfig.optInt("patchVersion", 0);
+                    defaultMeta.displayName = jsonConfig.optString("displayName", defaultMeta.name);
+                    defaultMeta.githubReleasesUrl = jsonConfig.optString("githubReleasesUrl");
+                    defaultMeta.offsetsUrl = jsonConfig.optString("offsetsUrl");
+                    defaultMeta.displaysUI = jsonConfig.optBoolean("displaysUI", true);
+                    defaultMeta.selfManagedUI = jsonConfig.optBoolean("selfManagedUI", false);
+                    JSONArray jdeps = jsonConfig.optJSONArray("dependencies");
+                    if (jdeps != null) {
+                        ElfModMetadata[] dependencies = new ElfModMetadata[jdeps.length()];
+                        for (int i = 0; i < dependencies.length; i++) {
+                            JSONObject jsonDependency = jdeps.getJSONObject(i);
+                            ElfModMetadata dependency = new ElfModMetadata();
+                            dependency.modIsValid = true;
+                            dependency.name = jsonDependency.optString("name", "dep");
+                            dependency.author = jsonDependency.optString("author");
+                            dependency.description = jsonDependency.optString("description");
+                            dependency.majorVersion = jsonDependency.optInt("majorVersion", 1);
+                            dependency.minorVersion = jsonDependency.optInt("minorVersion", 0);
+                            dependency.patchVersion = jsonDependency.optInt("patchVersion", 0);
+                            dependencies[i] = dependency;
+                        }
+                        defaultMeta.dependencies = dependencies;
+                    } else {
+                        defaultMeta.dependencies = new ElfModMetadata[0];
+                    }
+                    defaultMeta.modIsValid = true;
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-                defaultMeta.dependencies = dependencies;
+            }
+            if (!defaultMeta.modIsValid) {
+                // Fallback for raw / stripped ELF .so mods
+                String fallbackName = defaultMeta.name != null ? defaultMeta.name : "mod_" + System.currentTimeMillis() + ".so";
+                defaultMeta.name = fallbackName;
+                defaultMeta.displayName = fallbackName.replace(".so", "").replace("lib", "");
+                defaultMeta.author = "Native Mod";
+                defaultMeta.description = "Canvas Native ELF Mod";
+                defaultMeta.majorVersion = 1;
+                defaultMeta.minorVersion = 0;
+                defaultMeta.patchVersion = 0;
+                defaultMeta.displaysUI = true;
+                defaultMeta.dependencies = new ElfModMetadata[0];
                 defaultMeta.modIsValid = true;
-            } else {
-                defaultMeta.modIsValid = false;
-                return defaultMeta;
             }
             if (secsz_icon > 0 && secsz_icon < Integer.MAX_VALUE) {
                 try {
@@ -206,10 +235,20 @@ public class ElfUIBackbone {
         return metadata;
     }
 
-    private void loadFileFromInputStream(InputStream inputStream) throws IOException, NoDependenciesException, InvalidModException, ModExistsException {
-        byte[] elf = getBytesFromInputStream(inputStream);
+    private void loadFileFromInputStream(InputStream inputStream, String suggestedName) throws IOException, NoDependenciesException, InvalidModException, ModExistsException {
+        byte[] bytes = getBytesFromInputStream(inputStream);
         inputStream.close();
-        ElfModUIMetadata metadata = getElfMetadata(elf);
+
+        ElfModUIMetadata metadata;
+        boolean isLua = (suggestedName != null && suggestedName.endsWith(".lua")) || LuaModMetadata.isLuaScript(bytes);
+        if (isLua) {
+            String name = suggestedName != null ? suggestedName : "script_" + System.currentTimeMillis() + ".lua";
+            metadata = LuaModMetadata.parseFromBytes(bytes, name);
+            metadata.activity = this.activity;
+        } else {
+            metadata = getElfMetadata(bytes);
+        }
+
         if (!metadata.modIsValid) throw new InvalidModException();
         ArrayList<ElfModMetadata> badDependencies = new ArrayList<>();
         for (ElfModMetadata dep : metadata.dependencies) {
@@ -224,25 +263,28 @@ public class ElfUIBackbone {
             if (findSameMod(metadata.name)) throw new ModExistsException();
             File modFile = new File(modFolder, metadata.name);
             FileOutputStream fos = new FileOutputStream(modFile);
-            fos.write(elf);
+            fos.write(bytes);
             fos.close();
             metadata.modFile = modFile;
             mods.add(metadata);
-            //TODO: copy mod to the mods folder
         }
     }
 
-    public void addModSafely(InputStream stream) {
+    public void addModSafely(InputStream stream, String suggestedName) {
         new Thread(() -> {
             startLoading();
             try {
-                loadFileFromInputStream(stream);
+                loadFileFromInputStream(stream, suggestedName);
                 listener.refreshModList(1, getModsCount() - 1);
             } catch (Exception e) {
                 notifyException(e);
             }
             stopLoading();
         }).start();
+    }
+
+    public void addModSafely(InputStream stream) {
+        addModSafely(stream, null);
     }
 
     public void removeModSafelyAsync(int which) {

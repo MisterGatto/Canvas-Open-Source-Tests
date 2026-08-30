@@ -32,8 +32,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import dalvik.system.DexClassLoader;
+import git.artdeell.skymodloader.elfmod.ElfModUIMetadata;
 import git.artdeell.skymodloader.elfmod.ElfRefcountLoader;
 import git.artdeell.skymodloader.iconloader.IconLoader;
+import git.artdeell.skymodloader.luamod.LuaModMetadata;
 import git.artdeell.skymodloader.net.StarwatchBlocker;
 import git.artdeell.skymodloader.server.ServerManager;
 
@@ -44,6 +46,33 @@ public class MainActivity extends Activity {
     public static String SKY_PACKAGE_NAME;
     private Map<String, Integer> skyPackages;
     public static DeviceInfo deviceInfo;
+
+    public static String httpGet(String urlString) {
+        try {
+            java.net.URL url = new java.net.URL(urlString);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 Canvas/1.0");
+            int code = conn.getResponseCode();
+            java.io.InputStream is = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return "";
+            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+            byte[] data = new byte[4096];
+            int nRead;
+            while ((nRead = is.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, nRead);
+            }
+            buffer.flush();
+            conn.disconnect();
+            return buffer.toString("UTF-8");
+        } catch (Exception e) {
+            Log.e("MainActivity", "httpGet error for " + urlString, e);
+            return "";
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -242,6 +271,26 @@ public class MainActivity extends Activity {
             AccountStorage.sync(this);
 
             new ElfRefcountLoader(elfLibPath, modsDir).load();
+
+            File[] luaModFiles = modsDir.listFiles((dir, name) -> name.endsWith(".lua") && !new File(dir, name + "_invalid.txt").exists());
+            if (luaModFiles != null) {
+                for (File luaFile : luaModFiles) {
+                    try {
+                        ElfModUIMetadata meta = LuaModMetadata.parseFromFile(luaFile);
+                        nativeLoadLuaMod(
+                            luaFile.getAbsolutePath(),
+                            meta.displayName != null ? meta.displayName : meta.name,
+                            meta.author != null ? meta.author : "",
+                            meta.majorVersion + "." + meta.minorVersion + "." + meta.patchVersion,
+                            meta.description != null ? meta.description : ""
+                        );
+                        Log.i("MainActivity", "Loaded Lua mod: " + luaFile.getName());
+                    } catch (Exception e) {
+                        Log.e("MainActivity", "Failed to load Lua mod: " + luaFile.getName(), e);
+                    }
+                }
+            }
+
             BuildConfig.APPLICATION_ID = SKY_PACKAGE_NAME;
             startActivity(new Intent(this, GameActivity.class));
 
@@ -533,6 +582,7 @@ public class MainActivity extends Activity {
     public static native void getSysetemUI(Object systemUI);
     private static native void nativeSetSkyBuildKey(String key);
     private static native void nativeSetStarwatchAllowed(boolean allowed);
+    public static native void nativeLoadLuaMod(String path, String name, String author, String version, String description);
 
     // Video stats pushed down from SystemIO_android.UpdateMediaPlayer, which
     // already runs per frame on the thread that owns the ExoPlayer instance.
