@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > **Project Scope & Notice**:
-> This is a specialized **Lua & GameGuardian side project** maintained alongside standard [Canvas](https://github.com/skyprotocol/Canvas-Open-Source).
+> This is a specialized **Lua & GameGuardian SIDE PROJECT** maintained alongside standard [Canvas](https://github.com/skyprotocol/Canvas-Open-Source).
 > * **This Edition / Project**: Adds built-in Lua 5.4 scripting, native GameGuardian (`gg.*`) emulation, in-process memory scanning, and interactive ImGui dialogs.
 > * **LuaLoader Mod**: The standalone `liblualoader.so` mod is maintained separately and distributed as precompiled binary releases for standard Canvas. (RELEASE TBD)
 > * For Lua-specific questions or script support, please use this project's issues.
