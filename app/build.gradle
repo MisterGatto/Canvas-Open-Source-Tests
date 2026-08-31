@@ -13,19 +13,25 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("canvas-distribution.jks")
-            storePassword System.getenv("DIST_KS_PASSWORD")
-            keyAlias "key0"
-            keyPassword System.getenv("DIST_KS_PASSWORD")
+            def ksFile = file("canvas-release.jks")
+            def ksPass = System.getenv("DIST_KS_PASSWORD")
+            def kAlias = System.getenv("KEY_ALIAS") ?: "canvas"
+            def kPass = System.getenv("KEY_PASSWORD") ?: ksPass
+            if (ksFile.exists() && ksPass != null && !ksPass.isEmpty()) {
+                storeFile ksFile
+                storePassword ksPass
+                keyAlias kAlias
+                keyPassword kPass
+            }
         }
     }
 
     defaultConfig {
-        applicationId "git.artdeell.skymodloader"
+        applicationId "lua.com.tgc.sky.android.sml"
         minSdk 26
         targetSdk 34
-        versionCode 73
-        versionName "1.8.7"
+        versionCode 74
+        versionName "1.8.8"
 
         ndk {
             abiFilters "arm64-v8a"
@@ -45,7 +51,13 @@ android {
         release {
             minifyEnabled true
             shrinkResources true
-            signingConfig signingConfigs.release
+            def ksFile = file("canvas-release.jks")
+            def ksPass = System.getenv("DIST_KS_PASSWORD")
+            if (ksFile.exists() && ksPass != null && !ksPass.isEmpty()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -72,8 +84,6 @@ android {
 dependencies {
 
     implementation( platform 'org.jetbrains.kotlin:kotlin-bom:1.8.0')
-    implementation files('libs/sky-auth.aar')
-    implementation files('libs/sky-auth-localization.aar')
 
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'net.fornwall:jelf:0.9.0'

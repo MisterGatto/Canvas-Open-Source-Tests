@@ -19,8 +19,9 @@
 
     <application
         android:name=".SMLApplication"
-        android:process="com.tgc.sky.android.sml"
+        android:process="lua.com.tgc.sky.android.sml"
         android:allowBackup="true"
+        android:usesCleartextTraffic="true"
         android:appCategory="game"
         android:allowNativeHeapPointerTagging="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -36,7 +37,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="git.artdeell.skymodloader.provider"
+            android:authorities="${applicationId}.provider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -110,7 +111,7 @@
 
         <provider
             android:name="git.artdeell.skymodloader.updater.Updater"
-            android:authorities="git.artdeell.skymodloader.updater"
+            android:authorities="${applicationId}.updater"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

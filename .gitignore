@@ -8,3 +8,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystores and sensitive build keys
+*.jks
+*.keystore
+canvas-release.jks
+canvas-distribution.jks
+keystore_base64.txt

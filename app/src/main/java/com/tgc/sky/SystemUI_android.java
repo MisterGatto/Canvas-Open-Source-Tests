@@ -1358,7 +1358,7 @@ public class SystemUI_android {
             try {
                 Uri uri = FileProvider.getUriForFile(
                         SystemUI_android.this.m_activity,
-                        "git.artdeell.skymodloader.provider",
+                        SystemUI_android.this.m_activity.getPackageName() + ".provider",
                         new java.io.File(path));
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType(mimeType != null && !mimeType.isEmpty() ? mimeType : "application/octet-stream");

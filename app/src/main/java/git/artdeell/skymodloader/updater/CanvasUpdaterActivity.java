@@ -167,7 +167,7 @@ public class CanvasUpdaterActivity extends Activity implements ServiceConnection
 
     private void tryInstallPackage() {
         Intent androidInstallerIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-        androidInstallerIntent.setData(FileProvider.getUriForFile(this, "git.artdeell.skymodloader.updater", new File(getCacheDir(), "update.apk")));
+        androidInstallerIntent.setData(FileProvider.getUriForFile(this, getPackageName() + ".updater", new File(getCacheDir(), "update.apk")));
         androidInstallerIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(androidInstallerIntent);
     }
