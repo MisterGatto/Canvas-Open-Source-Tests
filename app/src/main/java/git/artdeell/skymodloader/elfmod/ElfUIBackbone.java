@@ -97,7 +97,7 @@ public class ElfUIBackbone {
     }
 
     private ElfModUIMetadata getElfMetadata(File f) throws IOException {
-        if (f.getName().endsWith(".lua")) {
+        if (f.getName().endsWith(".lua") || f.getName().endsWith(".luac")) {
             ElfModUIMetadata meta = LuaModMetadata.parseFromFile(f);
             meta.activity = this.activity;
             return meta;
@@ -119,7 +119,7 @@ public class ElfUIBackbone {
     }
 
     private ElfModUIMetadata getElfMetadata(ElfModUIMetadata defaultMeta, byte[] elfFile) {
-        if (LuaModMetadata.isLuaScript(elfFile) || (defaultMeta.name != null && defaultMeta.name.endsWith(".lua"))) {
+        if (LuaModMetadata.isLuaScript(elfFile) || (defaultMeta.name != null && (defaultMeta.name.endsWith(".lua") || defaultMeta.name.endsWith(".luac")))) {
             ElfModUIMetadata luaMeta = LuaModMetadata.parseFromBytes(elfFile, defaultMeta.name);
             luaMeta.activity = defaultMeta.activity;
             luaMeta.modFile = defaultMeta.modFile;
@@ -240,7 +240,7 @@ public class ElfUIBackbone {
         inputStream.close();
 
         ElfModUIMetadata metadata;
-        boolean isLua = (suggestedName != null && suggestedName.endsWith(".lua")) || LuaModMetadata.isLuaScript(bytes);
+        boolean isLua = (suggestedName != null && (suggestedName.endsWith(".lua") || suggestedName.endsWith(".luac"))) || LuaModMetadata.isLuaScript(bytes);
         if (isLua) {
             String name = suggestedName != null ? suggestedName : "script_" + System.currentTimeMillis() + ".lua";
             metadata = LuaModMetadata.parseFromBytes(bytes, name);

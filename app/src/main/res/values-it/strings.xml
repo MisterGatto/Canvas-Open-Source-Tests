@@ -169,4 +169,14 @@
     <string name="toast_export_failed">Impossibile esportare il backup</string>
     <string name="toast_import_success">Backup ripristinato con successo! Riavvio in corso…</string>
     <string name="toast_import_failed">Impossibile ripristinare il backup</string>
+
+    <!-- Storage permissions -->
+    <string name="storage_permission_title">Accesso alla Memoria Richiesto</string>
+    <string name="storage_permission_message">Canvas necessita dei permessi di accesso alla memoria per caricare mod e script Lua dalla memoria esterna (come /sdcard/Download).\n\nConcedi \"Accesso a tutti i file\" nella schermata seguente.</string>
+    <string name="grant_permission">Concedi Accesso</string>
+    <string name="storage_permission_granted">Accesso alla memoria concesso</string>
+    <string name="storage_permission_denied">Accesso alla memoria negato. Impossibile leggere /sdcard</string>
+    <string name="storage_permission_setting">Accesso a tutti i file (Memoria)</string>
+    <string name="storage_permission_status_granted">Concesso - /sdcard accessibile</string>
+    <string name="storage_permission_status_denied">Non concesso - tocca per autorizzare</string>
 </resources>

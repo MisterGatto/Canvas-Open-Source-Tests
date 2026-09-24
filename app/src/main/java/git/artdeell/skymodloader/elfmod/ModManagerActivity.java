@@ -54,6 +54,7 @@ import git.artdeell.skymodloader.updater.VersionNumber;
 public class ModManagerActivity extends Activity implements LoadingListener, ModUpdater {
     private static final int REQUEST_MOD = 1024 * 121;
     private static final int REQUEST_IMPORT_OFFSETS = 1024 * 122;
+    private static final int REQUEST_STORAGE_PERMISSION = 1024 * 123;
     private ElfModUIMetadata pendingOffsetsMod;
     private CanvasUpdaterConnection canvasUpdaterConnection;
     @SuppressLint("StaticFieldLeak")
@@ -100,6 +101,64 @@ public class ModManagerActivity extends Activity implements LoadingListener, Mod
         setButtonClickListeners();
         setButtonLongClickListeners();
         initializeTabNavigation();
+        checkAndRequestStoragePermissions();
+    }
+
+    private void checkAndRequestStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                DialogY dialogY = DialogY.createFromActivity(this);
+                dialogY.title.setText(R.string.storage_permission_title);
+                dialogY.content.setText(R.string.storage_permission_message);
+                dialogY.positiveButton.setText(R.string.grant_permission);
+                dialogY.positiveButton.setOnClickListener(v -> {
+                    dialogY.dialog.dismiss();
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                        intent.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    } catch (Exception e) {
+                        try {
+                            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                            startActivity(intent);
+                        } catch (Exception e2) {
+                            Toast.makeText(this, "Unable to open storage settings", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+                dialogY.negativeButton.setText(R.string.cancel);
+                dialogY.negativeButton.setOnClickListener(v -> dialogY.dialog.dismiss());
+                dialogY.dialog.setCancelable(true);
+                dialogY.dialog.show();
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                }, REQUEST_STORAGE_PERMISSION);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_STORAGE_PERMISSION) {
+            boolean granted = true;
+            for (int r : grantResults) {
+                if (r != PackageManager.PERMISSION_GRANTED) {
+                    granted = false;
+                    break;
+                }
+            }
+            if (granted) {
+                Toast.makeText(this, R.string.storage_permission_granted, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, R.string.storage_permission_denied, Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     private void initializeModUpdater() {

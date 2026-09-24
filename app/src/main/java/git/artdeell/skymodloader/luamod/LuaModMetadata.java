@@ -22,7 +22,7 @@ public class LuaModMetadata {
     public static ElfModUIMetadata parseFromBytes(byte[] data, String fallbackName) {
         ElfModUIMetadata meta = new ElfModUIMetadata();
         meta.name = fallbackName != null ? fallbackName : "script.lua";
-        meta.displayName = fallbackName != null ? fallbackName.replace(".lua", "") : "Lua Script";
+        meta.displayName = fallbackName != null ? fallbackName.replace(".luac", "").replace(".lua", "") : "Lua Script";
         meta.author = "Lua Script";
         meta.description = "GameGuardian / Canvas Lua Mod";
         meta.majorVersion = 1;
@@ -46,7 +46,7 @@ public class LuaModMetadata {
         ElfModUIMetadata meta = new ElfModUIMetadata();
         meta.modFile = file;
         meta.name = file.getName();
-        meta.displayName = file.getName().replace(".lua", "");
+        meta.displayName = file.getName().replace(".luac", "").replace(".lua", "");
         meta.author = "Lua Script";
         meta.description = "GameGuardian / Canvas Lua Mod";
         meta.majorVersion = 1;

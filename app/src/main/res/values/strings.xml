@@ -191,4 +191,14 @@
     <string name="toast_export_failed">Failed to export backup</string>
     <string name="toast_import_success">Backup restored successfully! Restarting…</string>
     <string name="toast_import_failed">Failed to restore backup</string>
+
+    <!-- Storage permissions -->
+    <string name="storage_permission_title">Storage Access Required</string>
+    <string name="storage_permission_message">Canvas requires storage access permissions to load mods and Lua scripts from external storage (such as /sdcard/Download).\n\nPlease grant \"All files access\" on the next screen.</string>
+    <string name="grant_permission">Grant Access</string>
+    <string name="storage_permission_granted">Storage access granted</string>
+    <string name="storage_permission_denied">Storage access denied. Cannot read /sdcard</string>
+    <string name="storage_permission_setting">All Files Access (Storage)</string>
+    <string name="storage_permission_status_granted">Granted - /sdcard accessible</string>
+    <string name="storage_permission_status_denied">Not granted - tap to allow</string>
 </resources>

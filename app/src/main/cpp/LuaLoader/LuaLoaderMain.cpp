@@ -3,6 +3,7 @@
 #include "Core/Canvas/Canvas.h"
 #include "Core/imgui/imgui.h"
 #include <android/log.h>
+#include <sys/stat.h>
 
 #define LOG_TAG "LuaLoader"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -89,7 +90,12 @@ static void LuaLoader_Draw(bool* open) {
         ImGui::SameLine();
         if (ImGui::Button("📂 Load Path")) {
             if (strlen(manualPath) > 0) {
-                Canvas::Lua::LuaManager::getInstance().loadScript(manualPath);
+                struct stat st;
+                if (stat(manualPath, &st) == 0 && S_ISDIR(st.st_mode)) {
+                    Canvas::Lua::LuaManager::getInstance().scanModsDirectory(manualPath);
+                } else {
+                    Canvas::Lua::LuaManager::getInstance().loadScript(manualPath);
+                }
             }
         }
     }

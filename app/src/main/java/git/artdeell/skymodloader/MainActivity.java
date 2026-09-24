@@ -275,7 +275,7 @@ public class MainActivity extends Activity {
 
             new ElfRefcountLoader(elfLibPath, modsDir).load();
 
-            File[] luaModFiles = modsDir.listFiles((dir, name) -> name.endsWith(".lua") && !new File(dir, name + "_invalid.txt").exists());
+            File[] luaModFiles = modsDir.listFiles((dir, name) -> (name.endsWith(".lua") || name.endsWith(".luac")) && !new File(dir, name + "_invalid.txt").exists());
             if (luaModFiles != null) {
                 for (File luaFile : luaModFiles) {
                     try {

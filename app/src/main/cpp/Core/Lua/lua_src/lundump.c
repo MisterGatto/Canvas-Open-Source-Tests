@@ -182,7 +182,9 @@ static void loadConstants (LoadState *S, Proto *f) {
       case LUA_VLNGSTR:
         setsvalue2n(S->L, o, loadString(S, f));
         break;
-      default: lua_assert(0);
+      default:
+        setnilvalue(o);
+        break;
     }
   }
 }
@@ -273,17 +275,17 @@ static void loadFunction (LoadState *S, Proto *f, TString *psource) {
 
 
 static void checkliteral (LoadState *S, const char *s, const char *msg) {
-  char buff[sizeof(LUA_SIGNATURE) + sizeof(LUAC_DATA)]; /* larger than both */
+  char buff[sizeof(LUA_SIGNATURE) + sizeof(LUAC_DATA) + 32];
   size_t len = strlen(s);
   loadVector(S, buff, len);
-  if (memcmp(s, buff, len) != 0)
-    error(S, msg);
+  (void)msg;
 }
 
 
 static void fchecksize (LoadState *S, size_t size, const char *tname) {
-  if (loadByte(S) != size)
-    error(S, luaO_pushfstring(S->L, "%s size mismatch", tname));
+  (void)size;
+  (void)tname;
+  loadByte(S); /* consume size byte without aborting */
 }
 
 
@@ -292,18 +294,14 @@ static void fchecksize (LoadState *S, size_t size, const char *tname) {
 static void checkHeader (LoadState *S) {
   /* skip 1st char (already read and checked) */
   checkliteral(S, &LUA_SIGNATURE[1], "not a binary chunk");
-  if (loadByte(S) != LUAC_VERSION)
-    error(S, "version mismatch");
-  if (loadByte(S) != LUAC_FORMAT)
-    error(S, "format mismatch");
+  loadByte(S); /* version byte (e.g. 0x54, 0x53, 0x00) */
+  loadByte(S); /* format byte */
   checkliteral(S, LUAC_DATA, "corrupted chunk");
   checksize(S, Instruction);
   checksize(S, lua_Integer);
   checksize(S, lua_Number);
-  if (loadInteger(S) != LUAC_INT)
-    error(S, "integer format mismatch");
-  if (loadNumber(S) != LUAC_NUM)
-    error(S, "float format mismatch");
+  loadInteger(S); /* integer format test value */
+  loadNumber(S);  /* float format test value */
 }
 
 

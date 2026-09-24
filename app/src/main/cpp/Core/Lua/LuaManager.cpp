@@ -4,6 +4,11 @@
 #include "LuaUIBridge.h"
 #include <fstream>
 #include <sstream>
+#include <vector>
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <cerrno>
 #include <dirent.h>
 #include <android/log.h>
 
@@ -24,21 +29,28 @@ LuaManager::~LuaManager() {
 
 void LuaManager::scanModsDirectory(const std::string& dirPath) {
     DIR* dir = opendir(dirPath.c_str());
-    if (!dir) return;
+    if (!dir) {
+        if (errno == EACCES || errno == EPERM) {
+            LOGE("Storage permission denied when opening directory %s", dirPath.c_str());
+        }
+        return;
+    }
 
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (entry->d_name[0] == '.') continue;
         std::string filename = entry->d_name;
-        if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".lua") {
+        bool isLua = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".lua");
+        bool isLuac = (filename.size() > 5 && filename.substr(filename.size() - 5) == ".luac");
+        if (isLua || isLuac) {
             std::string fullPath = dirPath + "/" + filename;
-            std::string baseName = filename.substr(0, filename.size() - 4);
+            std::string baseName = isLuac ? filename.substr(0, filename.size() - 5) : filename.substr(0, filename.size() - 4);
 
             bool alreadyLoaded = false;
             {
                 std::lock_guard<std::mutex> lock(m_scriptsMutex);
                 for (const auto& s : m_scripts) {
-                    if (s->path == fullPath || s->name == baseName) {
+                    if (s->path == fullPath) {
                         alreadyLoaded = true;
                         break;
                     }
@@ -53,11 +65,13 @@ void LuaManager::scanModsDirectory(const std::string& dirPath) {
 }
 
 void LuaManager::rescan() {
-    LOGI("Rescanning directories for .lua scripts...");
+    LOGI("Rescanning directories for .lua/.luac scripts...");
     scanModsDirectory("/data/user/0/git.artdeell.skymodloader/files/mods");
     scanModsDirectory("/data/data/git.artdeell.skymodloader/files/mods");
     scanModsDirectory("/sdcard/Download");
     scanModsDirectory("/storage/emulated/0/Download");
+    scanModsDirectory("/sdcard/Canvas");
+    scanModsDirectory("/storage/emulated/0/Canvas");
     scanModsDirectory("/storage/emulated/0/Android/data/git.artdeell.skymodloader/files");
     scanModsDirectory("/storage/emulated/0/Android/data/git.artdeell.skymodloader/files/mods");
 }
@@ -181,6 +195,149 @@ std::vector<LuaScriptInfo> LuaManager::getScriptsInfo() {
         list.push_back(info);
     }
     return list;
+}
+
+static int loadScriptBuffer(lua_State* L, const std::string& codeOrPath, bool isFile, const std::string& scriptName) {
+    std::vector<uint8_t> buffer;
+    std::string chunkName = "@" + scriptName;
+
+    if (isFile) {
+        FILE* fp = fopen(codeOrPath.c_str(), "rb");
+        if (!fp) {
+            int err = errno;
+            if (err == EACCES || err == EPERM) {
+                LOGE("Storage permission denied when reading %s! (errno %d)", codeOrPath.c_str(), err);
+                LuaUIBridge::getInstance().showToast("Storage permission denied! Please allow All Files Access in Settings.", false);
+            } else {
+                LOGE("Failed to open %s: %s (errno %d)", codeOrPath.c_str(), strerror(err), err);
+                LuaUIBridge::getInstance().showToast("Failed to open file: " + std::string(strerror(err)), false);
+            }
+            lua_pushfstring(L, "cannot open %s: %s", codeOrPath.c_str(), strerror(err));
+            return LUA_ERRFILE;
+        }
+
+        fseek(fp, 0, SEEK_END);
+        long sz = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+
+        if (sz < 0) sz = 0;
+        buffer.resize(static_cast<size_t>(sz));
+        if (sz > 0) {
+            size_t bytesRead = fread(buffer.data(), 1, sz, fp);
+            buffer.resize(bytesRead);
+        }
+        fclose(fp);
+    } else {
+        buffer.assign(codeOrPath.begin(), codeOrPath.end());
+    }
+
+    if (buffer.empty()) {
+        return luaL_loadbuffer(L, "", 0, chunkName.c_str());
+    }
+
+    // Strip UTF-8 BOM if present (0xEF, 0xBB, 0xBF)
+    size_t offset = 0;
+    if (buffer.size() >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) {
+        offset += 3;
+    }
+    // Strip UTF-16 LE BOM if present
+    else if (buffer.size() >= 2 && buffer[0] == 0xFF && buffer[1] == 0xFE) {
+        offset += 2;
+    }
+    // Strip UTF-16 BE BOM if present
+    else if (buffer.size() >= 2 && buffer[0] == 0xFE && buffer[1] == 0xFF) {
+        offset += 2;
+    }
+
+    // Check if this is an obfuscated / wrapped script with metadata comments or shebang before binary chunk
+    if (offset < buffer.size() && buffer[offset] != 0x1B) {
+        size_t searchLimit = std::min(buffer.size(), offset + 4096);
+        for (size_t i = offset; i + 4 <= searchLimit; ++i) {
+            if (buffer[i] == 0x1B && buffer[i+1] == 'L' && buffer[i+2] == 'u' && buffer[i+3] == 'a') {
+                bool onlyCommentsOrWhitespace = true;
+                bool inComment = false;
+                bool inShebang = false;
+                for (size_t j = offset; j < i; ++j) {
+                    uint8_t c = buffer[j];
+                    if (inComment) {
+                        if (c == '\n' || c == '\r') inComment = false;
+                    } else if (inShebang) {
+                        if (c == '\n' || c == '\r') inShebang = false;
+                    } else {
+                        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+                            continue;
+                        } else if (c == '#' && (j == offset || buffer[j-1] == '\n')) {
+                            inShebang = true;
+                        } else if (c == '-' && j + 1 < i && buffer[j+1] == '-') {
+                            inComment = true;
+                            j++;
+                        } else {
+                            onlyCommentsOrWhitespace = false;
+                            break;
+                        }
+                    }
+                }
+                if (onlyCommentsOrWhitespace) {
+                    LOGI("Detected binary chunk preceded by comments/shebang at offset %zu; stripping preamble", i);
+                    offset = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    const char* dataPtr = reinterpret_cast<const char*>(buffer.data() + offset);
+    size_t dataLen = buffer.size() - offset;
+
+    int status = luaL_loadbuffer(L, dataPtr, dataLen, chunkName.c_str());
+    if (status == LUA_OK) {
+        return LUA_OK;
+    }
+
+    const char* errMsg = lua_tostring(L, -1);
+    std::string errStr = errMsg ? errMsg : "";
+
+    bool isBinaryError = (errStr.find("bad binary format") != std::string::npos ||
+                          errStr.find("binary") != std::string::npos ||
+                          errStr.find("corrupted chunk") != std::string::npos ||
+                          errStr.find("version mismatch") != std::string::npos ||
+                          errStr.find("format mismatch") != std::string::npos ||
+                          errStr.find("size mismatch") != std::string::npos ||
+                          errStr.find("unexpected symbol near") != std::string::npos);
+
+    if (isBinaryError && dataLen >= 31) {
+        if (static_cast<uint8_t>(dataPtr[0]) == 0x1B) {
+            LOGI("Attempting automatic Lua binary header repair for %s...", scriptName.c_str());
+
+            static const uint8_t LUA54_HEADER[] = {
+                0x1B, 0x4C, 0x75, 0x61, // \x1bLua (4 bytes)
+                0x54,                   // version 5.4 (1 byte)
+                0x00,                   // official format (1 byte)
+                0x19, 0x93, 0x0D, 0x0A, 0x1A, 0x0A, // LUAC_DATA (6 bytes)
+                sizeof(uint32_t),       // sizeof(Instruction) = 4 (1 byte)
+                sizeof(lua_Integer),    // sizeof(lua_Integer) = 8 (1 byte)
+                sizeof(lua_Number),     // sizeof(lua_Number) = 8 (1 byte)
+                0x78, 0x56, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // LUAC_INT = 0x5678 (8 bytes)
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x28, 0x77, 0x40  // LUAC_NUM = 370.5 (8 bytes)
+            };
+
+            std::vector<uint8_t> repairedBuffer(buffer.begin() + offset, buffer.end());
+            memcpy(repairedBuffer.data(), LUA54_HEADER, sizeof(LUA54_HEADER));
+
+            lua_pop(L, 1);
+
+            status = luaL_loadbuffer(L, reinterpret_cast<const char*>(repairedBuffer.data()),
+                                     repairedBuffer.size(), chunkName.c_str());
+            if (status == LUA_OK) {
+                LOGI("Successfully auto-repaired binary header for '%s'!", scriptName.c_str());
+                return LUA_OK;
+            } else {
+                LOGE("Binary header repair attempt failed: %s", lua_tostring(L, -1));
+            }
+        }
+    }
+
+    return status;
 }
 
 void LuaManager::runScriptThread(std::shared_ptr<LuaScriptInstance> script, std::string codeOrPath, bool isFile) {
@@ -397,12 +554,7 @@ void LuaManager::runScriptThread(std::shared_ptr<LuaScriptInstance> script, std:
     )LUA";
     luaL_dostring(L, compatBootstrap);
 
-    int status = 0;
-    if (isFile) {
-        status = luaL_loadfile(L, codeOrPath.c_str());
-    } else {
-        status = luaL_loadstring(L, codeOrPath.c_str());
-    }
+    int status = loadScriptBuffer(L, codeOrPath, isFile, script->name);
 
     if (status != LUA_OK) {
         const char* err = lua_tostring(L, -1);
